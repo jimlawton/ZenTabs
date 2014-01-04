@@ -16,9 +16,9 @@ def sublime_text_3():
 
 if not sublime_text_3():
     from TabsWorker import WindowTabs
-    sublime.run_command('zen_tabs_reload')
 else:
     from .TabsWorker import WindowTabs
+
 
 g_tabLimit = 50
 g_showFullPath = False
@@ -40,6 +40,14 @@ def plugin_loaded():
         global_settings = sublime.load_settings("Preferences.sublime-settings")
         global_settings.set("highlight_modified_tabs", highlight_modified_tabs)
         sublime.save_settings("Preferences.sublime-settings")
+    print("Limit: " + str(g_tabLimit))
+    print("Full path: " + str(g_showFullPath))
+    print("Highlight: " + str(highlight_modified_tabs))
+
+
+if not sublime_text_3():
+    # because of plugin loaded earlier than preferences
+    sublime.set_timeout(lambda: plugin_loaded(), 500)
 
 
 def is_preview(view):
@@ -126,9 +134,9 @@ class ZenTabsListener(sublime_plugin.EventListener):
         if view_id not in win_tabs.edited_tab_ids:
             win_tabs.renew_list(win_tabs.opened_tab_ids, view_id)
         if len(sublime.active_window().views()) - len(win_tabs.edited_tab_ids) > g_tabLimit:
-            self.close_last_tab()
+            self.close_last_tab(view_id)
 
-    def close_last_tab(self):
+    def close_last_tab(self, active_view_id):
         index = 0
         active_window = sublime.active_window()
         while len(active_window.views()) - len(win_tabs.edited_tab_ids) > g_tabLimit:
@@ -140,6 +148,8 @@ class ZenTabsListener(sublime_plugin.EventListener):
                 if not view.is_dirty() and not view.is_scratch():
                     active_window.focus_view(view)
                     active_window.run_command('close')
+                    if win_tabs.get_view_by_id(active_view_id):
+                        active_window.focus_view(win_tabs.get_view_by_id(active_view_id))
                 else:
                     win_tabs.edited_tab_ids.append(view_id)
 
@@ -178,6 +188,11 @@ class SwitchTabsCommand(sublime_plugin.TextCommand):
     def prepare_lists(self, view_ids):
         for view_id in view_ids:
             view = win_tabs.get_view_by_id(view_id)
+            if view is None:
+                win_tabs.remove_from_list(win_tabs.opened_tab_ids, view_id)
+                win_tabs.remove_from_list(win_tabs.edited_tab_ids, view_id)
+                break
+
             is_current = self.window.get_view_index(self.active_view) == self.window.get_view_index(view)
             is_draft = view.file_name() is None
 
